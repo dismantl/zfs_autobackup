@@ -4,7 +4,7 @@ import sys
 import time
 
 from .CachedProperty import CachedProperty
-from .ExecuteNode import ExecuteError
+from .ExecuteNode import ExecuteError, ExecuteNode
 
 
 class ZfsDataset:
@@ -573,6 +573,9 @@ class ZfsDataset:
         """
         # build source command
         cmd = []
+
+        # start with a sleep in case the recv end needs to complete any setup, e.g. starting a netcat listener
+        cmd.extend(["sleep", "3", ExecuteNode.AND])
 
         cmd.extend(["zfs", "send", ])
 
