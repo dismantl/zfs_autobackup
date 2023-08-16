@@ -120,9 +120,13 @@ class ZfsAutobackup(ZfsAuto):
         group.add_argument('--buffer', metavar='SIZE', default=None,
                            help='Add zfs send and recv buffers to smooth out IO bursts. (e.g. 128M. requires mbuffer)')
         group.add_argument('--send-pipe', metavar="COMMAND", default=[], action='append',
-                           help='pipe zfs send output through COMMAND (can be used multiple times)')
+                           help='Pipe zfs send output through COMMAND (can be used multiple times)')
         group.add_argument('--recv-pipe', metavar="COMMAND", default=[], action='append',
-                           help='pipe zfs recv input through COMMAND (can be used multiple times)')
+                           help='Pipe zfs recv input through COMMAND (can be used multiple times)')
+        group.add_argument('--send-agent', metavar="COMMAND",
+                           help='Pipe zfs send output into COMMAND (must be used with --recv-agent)')
+        group.add_argument('--recv-agent', metavar="COMMAND",
+                           help='Pipe COMMAND output into zfs recv (must be used with --send-agent)')
 
         group = parser.add_argument_group("Thinner options")
         group.add_argument('--no-thinning', action='store_true', help="Do not destroy any snapshots.")
@@ -258,11 +262,23 @@ class ZfsAutobackup(ZfsAuto):
             logger("zfs send transfer rate : {}".format(self.args.rate))
             ret.extend([ExecuteNode.PIPE, "mbuffer", "-q", "-s128k", "-m16M", "-R" + self.args.rate])
 
+        # send agent
+        if self.args.send_agent:
+            ret.append(ExecuteNode.PIPE)
+            ret.extend(self.args.send_agent.split(" "))
+            logger("zfs send custom agent   : {}".format(self.args.send_agent))
+
         return ret
 
     def get_recv_pipes(self, logger):
 
         ret = []
+
+        # recv agent
+        if self.args.recv_agent:
+            ret.extend(self.args.recv_agent.split(" "))
+            ret.append(ExecuteNode.PIPE)
+            logger("zfs recv custom agent   : {}".format(self.args.recv_agent))
 
         # decompression
         if self.args.compress != None:
@@ -319,6 +335,7 @@ class ZfsAutobackup(ZfsAuto):
 
         send_pipes = self.get_send_pipes(source_node.verbose)
         recv_pipes = self.get_recv_pipes(target_node.verbose)
+        separate_send_recv = True if self.args.send_agent and self.args.recv_agent else False
 
         fail_count = 0
         count = 0
@@ -360,7 +377,8 @@ class ZfsAutobackup(ZfsAuto):
                                               destroy_incompatible=self.args.destroy_incompatible,
                                               send_pipes=send_pipes, recv_pipes=recv_pipes,
                                               decrypt=self.args.decrypt, encrypt=self.args.encrypt,
-                                              zfs_compressed=self.args.zfs_compressed, force=self.args.force)
+                                              zfs_compressed=self.args.zfs_compressed, force=self.args.force,
+                                              separate_send_recv=separate_send_recv)
             except Exception as e:
                 # if self.args.progress:
                 #     self.clear_progress()
